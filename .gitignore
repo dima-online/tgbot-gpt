@@ -8,3 +8,4 @@ config/production.json
 composer.lock
 voices/
 !voices/keep
+google-key.json

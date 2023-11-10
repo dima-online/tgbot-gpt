@@ -33,7 +33,7 @@ bot.command('history', getUserConversations)
 
 bot.command('admin', async (ctx) => {
   if (ctx.message.from.id !== config.get('ADMIN_TG_ID')) return
-  await ctx.reply('Привет Владилен')
+  await ctx.reply(config.get('ADMIN_TG_NAME'))
   // ctx.sendAudio()
 })
 

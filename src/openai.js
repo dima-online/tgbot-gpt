@@ -1,4 +1,4 @@
-import { Configuration, OpenAIApi } from 'openai'
+import OpenAI from 'openai'
 import { createReadStream } from 'fs'
 import config from 'config'
 
@@ -12,10 +12,9 @@ class OpenAI {
   }
 
   constructor(apiKey) {
-    const configuration = new Configuration({
-      apiKey,
-    })
-    this.openai = new OpenAIApi(configuration)
+    this.openai = new OpenAI({
+      apiKey
+    });
   }
 
   async chat(messages = [], user = '') {

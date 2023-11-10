@@ -1,48 +1,66 @@
 import { bold, code } from 'telegraf/format'
 import { openai } from './openai.js'
 import { ogg } from './ogg.js'
-import {
-  gptMessage,
-  removeFile,
-  emptySession,
-  printConversation,
-} from './utils.js'
+import { gptMessage, removeFile, emptySession, printConversation } from './utils.js'
 import { mongo } from './mongo.js'
 
+/**
+ * Обрабатывает голосовое сообщение пользователя.
+ * @param {object} ctx - Контекст Telegram бота.
+ */
 export async function proccessVoiceMessage(ctx) {
   try {
-    await ctx.reply(code('Секунду. Жду ответ от ChatGPT'))
+    const chatId = ctx.message.chatId
 
-    const link = await ctx.telegram.getFileLink(ctx.message.voice.file_id)
-    const userId = String(ctx.message.from.id)
+    if (chatId === config.get('ALLOWED_CHAT_ID')) {
+      // Разрешенная группа, обрабатываем запрос
+      await ctx.reply(code('Секунду. Жду ответ от ChatGPT'))
 
-    const oggPath = await ogg.create(link.href, userId)
-    const mp3Path = await ogg.toMp3(oggPath, userId)
-    removeFile(oggPath)
-    const text = await openai.transcription(mp3Path)
-    removeFile(mp3Path)
-    await ctx.reply(code(`Ваш запрос: ${text}`))
-    proccessGPTResponse(ctx, text)
+      const link = await ctx.telegram.getFileLink(ctx.message.voice.file_id)
+      const userId = String(ctx.message.from.id)
+
+      const oggPath = await ogg.create(link.href, userId)
+      const mp3Path = await ogg.toMp3(oggPath, userId)
+      removeFile(oggPath)
+      const text = await openai.transcription(mp3Path)
+      removeFile(mp3Path)
+      await ctx.reply(code(`Ваш запрос: ${text}`))
+      proccessGPTResponse(ctx, text)
+    } else {
+      // Неавторизованная группа
+      await ctx.reply(code('Извините, этот бот работает только в определенной группе.'))
+    }
   } catch (e) {
-    await ctx.reply(
-      `Ошибка с API. Скажи Владилену, чтоб пофиксил. ${e.message}`
-    )
+    await ctx.reply(`Ошибка с API. Скажи Владилену, чтоб пофиксил. ${e.message}`)
     console.error(`Error while proccessing voice message`, e.message)
   }
 }
 
+/**
+ * Обрабатывает текстовое сообщение пользователя.
+ * @param {object} ctx - Контекст Telegram бота.
+ */
 export async function proccessTextMessage(ctx) {
   try {
-    await ctx.reply(code('Секунду. Жду ответ от ChatGPT'))
-    proccessGPTResponse(ctx, ctx.message.text)
+    const chatId = ctx.message.chatId
+    if (chatId === config.get('ALLOWED_CHAT_ID')) {
+      // Разрешенная группа, обрабатываем запрос
+      await ctx.reply(code('Секунду. Жду ответ от ChatGPT'))
+      proccessGPTResponse(ctx, ctx.message.text)
+    } else {
+      // Неавторизованная группа
+      await ctx.reply(code('Извините, этот бот работает только в определенной группе.'))
+    }
   } catch (e) {
-    ctx.reply(
-      `Ошибка с API. Скажи Владилену, чтоб пофиксил. ${e.message}`
-    )
+    ctx.reply(`Ошибка с API. Скажи Владилену, чтоб пофиксил. ${e.message}`)
     console.error(`Error while proccessing text message`, e.message)
   }
 }
 
+/**
+ * Обрабатывает запрос обратного вызова (callback query) от пользователя.
+ * @param {object} ctx - Контекст Telegram бота.
+ */
 export async function handleCallbackQuery(ctx) {
   try {
     if (ctx.update.callback_query.data === 'save_conversation') {
@@ -62,6 +80,10 @@ export async function handleCallbackQuery(ctx) {
   }
 }
 
+/**
+ * Получает все беседы пользователя и отправляет список в чат.
+ * @param {object} ctx - Контекст Telegram бота.
+ */
 export async function getUserConversations(ctx) {
   try {
     const user = await mongo.createOrGetUser(ctx.message.from)
@@ -83,6 +105,11 @@ export async function getUserConversations(ctx) {
   }
 }
 
+/**
+ * Обрабатывает ответ от GPT и отправляет его пользователю.
+ * @param {object} ctx - Контекст Telegram бота.
+ * @param {string} text - Текстовый ответ от GPT.
+ */
 async function proccessGPTResponse(ctx, text = '') {
   try {
     if (!text.trim()) return
@@ -93,23 +120,11 @@ async function proccessGPTResponse(ctx, text = '') {
     console.log('DEBUG', ctx.session.messages)
 
     if (!response)
-      return ctx.reply(
-        `Ошибка с API. Скажи Владилену, чтоб пофиксил. ${response}`
-      )
+      return ctx.reply(`Ошибка с API. Скажи Владилену, чтоб пофиксил. ${response}`)
 
     ctx.session.messages.push(
       gptMessage(response.content, openai.roles.ASSISTANT)
     )
-
-    // const audio = await textConverter.toSpeech(response.content)
-
-    // await ctx.sendAudio(
-    //   { source: audio },
-    //   {
-    //     title: 'Ответ от ассистента GPT',
-    //     performer: 'GPT',
-    //   }
-    // )
 
     ctx.reply(response.content, {
       reply_markup: {
